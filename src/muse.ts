@@ -14,18 +14,10 @@ import { encodeCommand, decodeResponse, observableCharacteristic } from './lib/m
 export { zipSamples, EEGSample } from './lib/zip-samples';
 export { EEGReading, TelemetryData, AccelerometerData, GyroscopeData, XYZ, MuseControlResponse };
 
-export const MUSE_SERVICE = 0xfe8d;
-const CONTROL_CHARACTERISTIC = '273e0001-4c4d-454d-96be-f03bac821358';
-const TELEMETRY_CHARACTERISTIC = '273e000b-4c4d-454d-96be-f03bac821358';
-const GYROSCOPE_CHARACTERISTIC = '273e0009-4c4d-454d-96be-f03bac821358';
-const ACCELEROMETER_CHARACTERISTIC = '273e000a-4c4d-454d-96be-f03bac821358';
-const EEG_CHARACTERISTICS = [
-    '273e0003-4c4d-454d-96be-f03bac821358',
-    '273e0004-4c4d-454d-96be-f03bac821358',
-    '273e0005-4c4d-454d-96be-f03bac821358',
-    '273e0006-4c4d-454d-96be-f03bac821358',
-    '273e0007-4c4d-454d-96be-f03bac821358'
-];
+export const SIMBLEE_SERVICE = 0xfe84;
+/** Simblee */
+const CONTROL_CHARACTERISTIC = '2d30c083f39f4ce6923f3484ea480596';
+const EEG_CHARACTERISTIC = '2d30c082f39f4ce6923f3484ea480596';
 
 // These names match the characteristics defined in EEG_CHARACTERISTICS above
 export const channelNames = [
@@ -46,8 +38,6 @@ export class MuseClient {
     public connectionStatus = new BehaviorSubject<boolean>(false);
     public rawControlData: Observable<string>;
     public controlResponses: Observable<MuseControlResponse>;
-    public telemetryData: Observable<TelemetryData>;
-    public gyroscopeData: Observable<GyroscopeData>;
     public accelerometerData: Observable<AccelerometerData>;
     public eegReadings: Observable<EEGReading>;
 
@@ -56,13 +46,13 @@ export class MuseClient {
             this.gatt = gatt;
         } else {
             const device = await navigator.bluetooth.requestDevice({
-                filters: [{ services: [MUSE_SERVICE] }]
+                filters: [{ services: [SIMBLEE_SERVICE] }]
             });
             this.gatt = await device.gatt!.connect();
         }
         this.deviceName = this.gatt.device.name || null;
 
-        const service = await this.gatt.getPrimaryService(MUSE_SERVICE);
+        const service = await this.gatt.getPrimaryService(SIMBLEE_SERVICE);
         Observable.fromEvent<void>(this.gatt.device, 'gattserverdisconnected').first().subscribe(() => {
             this.gatt = null;
             this.connectionStatus.next(false);
@@ -86,9 +76,9 @@ export class MuseClient {
             .map(parseGyroscope);
 
         // Accelerometer
-        const accelerometerCharacteristic = await service.getCharacteristic(ACCELEROMETER_CHARACTERISTIC);
-        this.accelerometerData = (await observableCharacteristic(accelerometerCharacteristic))
-            .map(parseAccelerometer);
+        const eegCharacteristic = await service.getCharacteristic(EEG_CHARACTERISTIC);
+        this.eegData = (await observableCharacteristic(eegCharacteristic))
+            .map(parseEEGData);
 
         // EEG
         this.eegCharacteristics = [];
