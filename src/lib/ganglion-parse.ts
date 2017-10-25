@@ -6,6 +6,7 @@ import 'rxjs/add/operator/filter';
 import 'rxjs/add/operator/map';
 
 import { EEGReading, TelemetryData, AccelerometerData, GyroscopeData } from './ganglion-interfaces';
+import { k } from './ganglion-utils';
 
 export function parseControl(controlData: Observable<string>) {
     return controlData
@@ -34,7 +35,29 @@ export function decodeUnsigned12BitData(samples: Uint8Array) {
     return samples12Bit;
 }
 
-export function decodeEEGSamples(samples: Uint8Array) {
+export function decodeEEGSamples(data: Uint8Array) {
+    let byteId = data.getInt8(0);
+    if (byteId <= k.OBCIGanglionByteId19Bit.max) {
+        processProcessSampleData(data);
+    } else {
+        switch (byteId) {
+            case k.OBCIGanglionByteIdMultiPacket:
+                this._processMultiBytePacket(data);
+                break;
+            case k.OBCIGanglionByteIdMultiPacketStop:
+                this._processMultiBytePacketStop(data);
+                break;
+            case k.OBCIGanglionByteIdImpedanceChannel1:
+            case k.OBCIGanglionByteIdImpedanceChannel2:
+            case k.OBCIGanglionByteIdImpedanceChannel3:
+            case k.OBCIGanglionByteIdImpedanceChannel4:
+            case k.OBCIGanglionByteIdImpedanceChannelReference:
+                this._processImpedanceData(data);
+                break;
+            default:
+                this._processOtherData(data);
+        }
+    }
     return decodeUnsigned12BitData(samples)
         .map(n => 0.48828125 * (n - 0x800));
 }
@@ -52,6 +75,69 @@ export function parseAccelerometer(data: DataView): AccelerometerData {
         samples: [sample(2), sample(8), sample(14)]
     };
 }
+
+export function processRouteSampleData(data: Uint8Array) {
+    if (data.getInt8(0) === k.OBCIGanglionByteIdUncompressed) {
+        this._processUncompressedData(data);
+    } else {
+        this._processCompressedData(data);
+    }
+};
+
+/**
+ * Checks for dropped packets
+ * @param data {Buffer}
+ * @private
+ */
+export function processProcessSampleData(data) {
+    const curByteId = parseInt(data[0]);
+    const difByteId = curByteId - this._packetCounter;
+
+    if (this._firstPacket) {
+        this._firstPacket = false;
+        this._processRouteSampleData(data);
+        return;
+    }
+
+    // Wrap around situation
+    if (difByteId < 0) {
+        if (this._packetCounter <= k.OBCIGanglionByteId18Bit.max) {
+            if (this._packetCounter === k.OBCIGanglionByteId18Bit.max) {
+                if (curByteId !== k.OBCIGanglionByteIdUncompressed) {
+                    this._droppedPacket(curByteId - 1);
+                }
+            } else {
+                let tempCounter = this._packetCounter + 1;
+                while (tempCounter <= k.OBCIGanglionByteId18Bit.max) {
+                    this._droppedPacket(tempCounter);
+                    tempCounter++;
+                }
+            }
+        } else if (this._packetCounter === k.OBCIGanglionByteId19Bit.max) {
+            if (curByteId !== k.OBCIGanglionByteIdUncompressed) {
+                this._droppedPacket(curByteId - 1);
+            }
+        } else {
+            let tempCounter = this._packetCounter + 1;
+            while (tempCounter <= k.OBCIGanglionByteId19Bit.max) {
+                this._droppedPacket(tempCounter);
+                tempCounter++;
+            }
+        }
+    } else if (difByteId > 1) {
+        if (this._packetCounter === k.OBCIGanglionByteIdUncompressed && curByteId === k.OBCIGanglionByteId19Bit.min) {
+            this._processRouteSampleData(data);
+            return;
+        } else {
+            let tempCounter = this._packetCounter + 1;
+            while (tempCounter < curByteId) {
+                this._droppedPacket(tempCounter);
+                tempCounter++;
+            }
+        }
+    }
+    this._processRouteSampleData(data);
+};
 
 /**
  * Converts a special ganglion 18 bit compressed number
@@ -102,13 +188,12 @@ export function convert19bitAsInt32 (threeByteBuffer: Uint8Array) {
  *  and 4 channels per sample.)
  */
 export function decompressDeltas18Bit (buffer: Uint8Array) {
-  const GanglionSamplesPerPacket = 2;
-  let D = new Array(GanglionSamplesPerPacket); // 2 Ganglion Samples Per Packet
+  let D = new Array(k.OBCIGanglionSamplesPerPacket); // 2 Ganglion Samples Per Packet
   D[0] = [0, 0, 0, 0];
   D[1] = [0, 0, 0, 0];
 
   let receivedDeltas = [];
-  for (let i = 0; i < GanglionSamplesPerPacket; i++) {
+  for (let i = 0; i < k.OBCIGanglionSamplesPerPacket; i++) {
     receivedDeltas.push([0, 0, 0, 0]);
   }
 
@@ -193,13 +278,12 @@ export function decompressDeltas18Bit (buffer: Uint8Array) {
  * @private
  */
 export function decompressDeltas19Bit (buffer: Uint8Array) {
-  const GanglionSamplesPerPacket = 2;
-  let D = new Array(GanglionSamplesPerPacket); // 2
+  let D = new Array(k.OBCIGanglionSamplesPerPacket); // 2
   D[0] = [0, 0, 0, 0];
   D[1] = [0, 0, 0, 0];
 
   let receivedDeltas = [];
-  for (let i = 0; i < GanglionSamplesPerPacket; i++) {
+  for (let i = 0; i < k.OBCIGanglionSamplesPerPacket; i++) {
     receivedDeltas.push([0, 0, 0, 0]);
   }
 

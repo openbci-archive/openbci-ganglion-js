@@ -64,30 +64,11 @@ export class GanglionClient {
             .share();
         this.controlResponses = parseControl(this.rawControlData);
 
-        // Accelerometer
+        // EEG
         const eegCharacteristic = await service.getCharacteristic(EEG_CHARACTERISTIC);
         this.eegData = (await observableCharacteristic(eegCharacteristic))
-            .map(data => {
-              
-            });
+            .map(decodeEEGSamples);
 
-        // EEG
-        this.eegCharacteristics = [];
-        const eegObservables = [];
-        const channelCount = this.enableAux ? EEG_CHARACTERISTICS.length : 4;
-        for (let index = 0; index < channelCount; index++) {
-            let characteristicId = EEG_CHARACTERISTICS[index];
-            const eegChar = await service.getCharacteristic(characteristicId);
-            eegObservables.push(
-                (await observableCharacteristic(eegChar)).map(data => {
-                    return {
-                        electrode: index,
-                        timestamp: data.getUint16(0),
-                        samples: decodeEEGSamples(new Uint8Array(data.buffer).subarray(2))
-                    };
-                }));
-            this.eegCharacteristics.push(eegChar);
-        }
         this.eegReadings = Observable.merge(...eegObservables);
         this.connectionStatus.next(true);
     }
