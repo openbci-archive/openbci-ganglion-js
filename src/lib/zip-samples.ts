@@ -1,5 +1,5 @@
 import { Observable } from 'rxjs/Observable';
-import { EEGReading } from './muse-interfaces';
+import { EEGReading } from './ganglion-interfaces';
 
 import 'rxjs/add/observable/from';
 import 'rxjs/add/operator/mergeMap';

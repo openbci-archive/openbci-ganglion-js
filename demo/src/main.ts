@@ -1,4 +1,4 @@
-import { MuseClient, EEGReading, channelNames } from './../../src/muse';
+import { GanglionClient, EEGReading, channelNames } from './../../src/muse';
 
 (window as any).connect = async () => {
     let graphTitles = Array.from(document.querySelectorAll('.electrode-item h3'));
@@ -30,7 +30,7 @@ import { MuseClient, EEGReading, channelNames } from './../../src/muse';
         }
     }
 
-    let client = new MuseClient();
+    let client = new GanglionClient();
     client.connectionStatus.subscribe(status => {
         console.log(status ? 'Connected!' : 'Disconnected')
     });
@@ -43,20 +43,20 @@ import { MuseClient, EEGReading, channelNames } from './../../src/muse';
         client.eegReadings.subscribe(reading => {
             plot(reading);
         });
-        client.telemetryData.subscribe(reading => {
-            document.getElementById('temperature')!.innerText = reading.temperature.toString() + '℃';
-            document.getElementById('batteryLevel')!.innerText = reading.batteryLevel.toFixed(2) + '%';
-        });
-        client.accelerometerData.subscribe(accel => {
-            const normalize = (v: number) => (v / 16384.).toFixed(2) + 'g';
-            document.getElementById('accelerometer-x')!.innerText = normalize(accel.samples[2].x);
-            document.getElementById('accelerometer-y')!.innerText = normalize(accel.samples[2].y);
-            document.getElementById('accelerometer-z')!.innerText = normalize(accel.samples[2].z);
-        });
-        await client.deviceInfo().then(deviceInfo => {
-            document.getElementById('hardware-version')!.innerText = deviceInfo.hw;
-            document.getElementById('firmware-version')!.innerText = deviceInfo.fw;
-        });
+        // client.telemetryData.subscribe(reading => {
+        //     document.getElementById('temperature')!.innerText = reading.temperature.toString() + '℃';
+        //     document.getElementById('batteryLevel')!.innerText = reading.batteryLevel.toFixed(2) + '%';
+        // });
+        // client.accelerometerData.subscribe(accel => {
+        //     const normalize = (v: number) => (v / 16384.).toFixed(2) + 'g';
+        //     document.getElementById('accelerometer-x')!.innerText = normalize(accel.samples[2].x);
+        //     document.getElementById('accelerometer-y')!.innerText = normalize(accel.samples[2].y);
+        //     document.getElementById('accelerometer-z')!.innerText = normalize(accel.samples[2].z);
+        // });
+        // await client.deviceInfo().then(deviceInfo => {
+        //     document.getElementById('hardware-version')!.innerText = deviceInfo.hw;
+        //     document.getElementById('firmware-version')!.innerText = deviceInfo.fw;
+        // });
     } catch (err) {
         console.error('Connection failed', err);
     }

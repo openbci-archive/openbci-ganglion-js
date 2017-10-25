@@ -1,4 +1,4 @@
-import { encodeCommand } from './muse-utils';
+import { encodeCommand } from './ganglion-utils';
 
 import { TextEncoder, TextDecoder } from 'text-encoding'; // polyfill
 

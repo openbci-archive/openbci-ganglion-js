@@ -1,11 +1,11 @@
 {
-  "name": "muse-js",
-  "version": "0.6.0",
-  "description": "Muse 2016 EEG Headset JavaScript Library",
-  "main": "dist/muse.js",
-  "typings": "dist/muse.d.ts",
-  "repository": "https://github.com/urish/muse-js",
-  "author": "Uri Shaked <uri@salsa4fun.co.il>",
+  "name": "openbci-ganglion-js",
+  "version": "0.1.0",
+  "description": "Ganglion EEG JavaScript Library",
+  "main": "dist/ganglion.js",
+  "typings": "dist/ganglion.d.ts",
+  "repository": "https://github.com/openbci/openbci-ganglion-js",
+  "author": "AJ Keller <pushtheworldllc@gmail.com>",
   "license": "MIT",
   "scripts": {
     "build": "tsc",

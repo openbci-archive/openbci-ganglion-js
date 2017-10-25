@@ -7,12 +7,12 @@ import 'rxjs/add/operator/share';
 import 'rxjs/add/operator/take';
 import 'rxjs/add/operator/toPromise';
 
-import { EEGReading, TelemetryData, AccelerometerData, GyroscopeData, XYZ, MuseControlResponse, MuseDeviceInfo } from './lib/muse-interfaces';
-import { parseControl, decodeEEGSamples, parseTelemetry, parseAccelerometer, parseGyroscope } from './lib/muse-parse';
-import { encodeCommand, decodeResponse, observableCharacteristic } from './lib/muse-utils';
+import { EEGReading, AccelerometerData, GanglionControlResponse, GanglionDeviceInfo } from './lib/ganglion-interfaces';
+import { parseControl, decodeEEGSamples, parseAccelerometer } from './lib/ganglion-parse';
+import { encodeCommand, decodeResponse, observableCharacteristic } from './lib/ganglion-utils';
 
 export { zipSamples, EEGSample } from './lib/zip-samples';
-export { EEGReading, TelemetryData, AccelerometerData, GyroscopeData, XYZ, MuseControlResponse };
+export { EEGReading, AccelerometerData, GanglionControlResponse };
 
 export const SIMBLEE_SERVICE = 0xfe84;
 /** Simblee */
@@ -21,14 +21,13 @@ const EEG_CHARACTERISTIC = '2d30c082f39f4ce6923f3484ea480596';
 
 // These names match the characteristics defined in EEG_CHARACTERISTICS above
 export const channelNames = [
-    'TP9',
-    'AF7',
-    'AF8',
-    'TP10',
-    'AUX'
+    '1',
+    '2',
+    '3',
+    '4'
 ];
 
-export class MuseClient {
+export class GanglionClient {
     private gatt: BluetoothRemoteGATTServer | null = null;
     private controlChar: BluetoothRemoteGATTCharacteristic;
     private eegCharacteristics: BluetoothRemoteGATTCharacteristic[];
@@ -37,7 +36,7 @@ export class MuseClient {
     public deviceName: string | null = '';
     public connectionStatus = new BehaviorSubject<boolean>(false);
     public rawControlData: Observable<string>;
-    public controlResponses: Observable<MuseControlResponse>;
+    public controlResponses: Observable<GanglionControlResponse>;
     public accelerometerData: Observable<AccelerometerData>;
     public eegReadings: Observable<EEGReading>;
 
@@ -65,20 +64,12 @@ export class MuseClient {
             .share();
         this.controlResponses = parseControl(this.rawControlData);
 
-        // Battery
-        const telemetryCharacteristic = await service.getCharacteristic(TELEMETRY_CHARACTERISTIC);
-        this.telemetryData = (await observableCharacteristic(telemetryCharacteristic))
-            .map(parseTelemetry);
-
-        // Gyroscope
-        const gyroscopeCharacteristic = await service.getCharacteristic(GYROSCOPE_CHARACTERISTIC);
-        this.gyroscopeData = (await observableCharacteristic(gyroscopeCharacteristic))
-            .map(parseGyroscope);
-
         // Accelerometer
         const eegCharacteristic = await service.getCharacteristic(EEG_CHARACTERISTIC);
         this.eegData = (await observableCharacteristic(eegCharacteristic))
-            .map(parseEEGData);
+            .map(data => {
+              
+            });
 
         // EEG
         this.eegCharacteristics = [];
@@ -108,23 +99,21 @@ export class MuseClient {
     async start() {
         // Subscribe to egg characteristics
         await this.pause();
-        // Select preset number 20
-        await this.controlChar.writeValue(encodeCommand('p20'));
-        await this.controlChar.writeValue(encodeCommand('s'));
+        await this.sendCommand('b');
         await this.resume();
     }
 
     async pause() {
-        await this.sendCommand('h');
+        await this.sendCommand('s');
     }
 
     async resume() {
-        await this.sendCommand('d');
+        await this.sendCommand('b');
     }
 
     async deviceInfo() {
         const resultListener = this.controlResponses.filter(r => !!r.fw).take(1).toPromise();
-        await this.sendCommand('v1');
+        await this.sendCommand('v');
         return resultListener as Promise<MuseDeviceInfo>;
     }
 
