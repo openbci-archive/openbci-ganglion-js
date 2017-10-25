@@ -5,7 +5,7 @@ import 'rxjs/add/operator/scan';
 import 'rxjs/add/operator/filter';
 import 'rxjs/add/operator/map';
 
-import { EEGReading, TelemetryData, AccelerometerData, GyroscopeData } from './ganglion-interfaces';
+import { EEGReading, AccelerometerData } from './ganglion-interfaces';
 import { k } from './ganglion-utils';
 
 export function parseControl(controlData: Observable<string>) {
@@ -38,7 +38,7 @@ export function decodeUnsigned12BitData(samples: Uint8Array) {
 export function decodeEEGSamples(data: Uint8Array) {
     let byteId = data.getInt8(0);
     if (byteId <= k.OBCIGanglionByteId19Bit.max) {
-        processProcessSampleData(data);
+        _processProcessSampleData(data);
     } else {
         switch (byteId) {
             case k.OBCIGanglionByteIdMultiPacket:
@@ -76,21 +76,85 @@ export function parseAccelerometer(data: DataView): AccelerometerData {
     };
 }
 
-export function processRouteSampleData(data: Uint8Array) {
-    if (data.getInt8(0) === k.OBCIGanglionByteIdUncompressed) {
-        this._processUncompressedData(data);
-    } else {
-        this._processCompressedData(data);
+/**
+ * Utilize `receivedDeltas` to get actual count values.
+ * @param receivedDeltas {Array} - An array of deltas
+ *  of shape 2x4 (2 samples per packet and 4 channels per sample.)
+ * @param decompressedSamples {Array} - An array that of three
+ *  samples to compute and store deltas through each cycle
+ * @private
+ */
+export function _decompressSamples(receivedDeltas: Array, decompressedSamples: Array) {
+    // add the delta to the previous value
+    for (let i = 1; i < 3; i++) {
+        for (let j = 0; j < 4; j++) {
+            decompressedSamples[i][j] = decompressedSamples[i - 1][j] - receivedDeltas[i - 1][j];
+        }
     }
-};
+}
+
+/**
+ * Process an compressed packet of data.
+ * @param data {Buffer}
+ *  Data packet buffer from noble.
+ * @param decompressedSamples {Array} - An array that of three
+ *  samples to compute and store deltas through each cycle
+ * @private
+ */
+export function _processCompressedData(data: Uint8Array, decompressedSamples: Array) {
+    // Save the packet counter
+    this._packetCounter = parseInt(data[0]);
+
+    // Decompress the buffer into array
+    if (this._packetCounter <= k.OBCIGanglionByteId18Bit.max) {
+        _decompressSamples(decompressDeltas18Bit(data.slice(k.OBCIGanglionPacket18Bit.dataStart, k.OBCIGanglionPacket18Bit.dataStop)), decompressedSamples);
+        const sample1 = this._buildSample(this._packetCounter * 2 - 1, this._decompressedSamples[1]);
+        const sample2 = this._buildSample(this._packetCounter * 2, this._decompressedSamples[2]);
+
+        switch (this._packetCounter % 10) {
+            case k.OBCIGanglionAccelAxisX:
+                this._accelArray[0] = this.options.sendCounts ? data.readInt8(k.OBCIGanglionPacket18Bit.auxByte - 1) : data.readInt8(k.OBCIGanglionPacket18Bit.auxByte - 1) * k.OBCIGanglionAccelScaleFactor;
+                break;
+            case k.OBCIGanglionAccelAxisY:
+                this._accelArray[1] = this.options.sendCounts ? data.readInt8(k.OBCIGanglionPacket18Bit.auxByte - 1) : data.readInt8(k.OBCIGanglionPacket18Bit.auxByte - 1) * k.OBCIGanglionAccelScaleFactor;
+                break;
+            case k.OBCIGanglionAccelAxisZ:
+                this._accelArray[2] = this.options.sendCounts ? data.readInt8(k.OBCIGanglionPacket18Bit.auxByte - 1) : data.readInt8(k.OBCIGanglionPacket18Bit.auxByte - 1) * k.OBCIGanglionAccelScaleFactor;
+                this.emit(k.OBCIEmitterAccelerometer, this._accelArray);
+                if (this.options.sendCounts) {
+                    sample1.accelData = this._accelArray;
+                } else {
+                    sample1.accelDataCounts = this._accelArray;
+                }
+                break;
+            default:
+                break;
+        }
+        this.emit(k.OBCIEmitterSample, sample1);
+        this.emit(k.OBCIEmitterSample, sample2);
+    } else {
+        this._decompressSamples(obciUtils.decompressDeltas19Bit(data.slice(k.OBCIGanglionPacket19Bit.dataStart, k.OBCIGanglionPacket19Bit.dataStop)));
+
+        const sample1 = this._buildSample((this._packetCounter - 100) * 2 - 1, this._decompressedSamples[1]);
+        const sample2 = this._buildSample((this._packetCounter - 100) * 2, this._decompressedSamples[2]);
+
+        this.emit(k.OBCIEmitterSample, sample1);
+        this.emit(k.OBCIEmitterSample, sample2);
+    }
+
+    // Rotate the 0 position for next time
+    for (let i = 0; i < k.OBCINumberOfChannelsGanglion; i++) {
+        this._decompressedSamples[0][i] = this._decompressedSamples[2][i];
+    }
+}
 
 /**
  * Checks for dropped packets
  * @param data {Buffer}
  * @private
  */
-export function processProcessSampleData(data) {
-    const curByteId = parseInt(data[0]);
+export function _processProcessSampleData(data: Uint8Array) {
+    const curByteId = data[0];
     const difByteId = curByteId - this._packetCounter;
 
     if (this._firstPacket) {
@@ -137,6 +201,36 @@ export function processProcessSampleData(data) {
         }
     }
     this._processRouteSampleData(data);
+}
+
+export function _processRouteSampleData(data: Uint8Array) {
+    if (parseInt(data[0]) === k.OBCIGanglionByteIdUncompressed) {
+        this._processUncompressedData(data);
+    } else {
+        this._processCompressedData(data);
+    }
+}
+
+/**
+ * Process an uncompressed packet of data.
+ * @param data {Buffer}
+ *  Data packet buffer from noble.
+ * @private
+ */
+export function _processUncompressedData(data: Uint8Array) {
+    let start = 1;
+
+    // Resets the packet counter back to zero
+    this._packetCounter = k.OBCIGanglionByteIdUncompressed;  // used to find dropped packets
+    data.copy(this._rawDataPacketToSample.rawDataPacket, 2);
+
+    for (let i = 0; i < 4; i++) {
+        this._decompressedSamples[0][i] = interpret24bitAsInt32(data, start);  // seed the decompressor
+        start += 3;
+    }
+
+    const newSample = this._buildSample(0, this._decompressedSamples[0]);
+    this.emit(k.OBCIEmitterSample, newSample);
 };
 
 /**

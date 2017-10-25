@@ -9,8 +9,7 @@ export function decodeResponse(bytes: Uint8Array) {
 }
 
 export function encodeCommand(cmd: string) {
-	const encoded = new TextEncoder('utf-8').encode(`${cmd}`);
-	return encoded;
+	return new TextEncoder('utf-8').encode(`${cmd}`);
 }
 
 export async function observableCharacteristic(characteristic: BluetoothRemoteGATTCharacteristic) {
@@ -71,6 +70,7 @@ const obciGanglionScaleFactorPerCountVolts = obciGanglionMCP3912Vref / (8388607.
 
 
 export const k = {
+	OBCIGanglionAccelScaleFactor: obciGanglionAccelScaleFactor,
 	/** Accel packets */
 	OBCIGanglionAccelAxisX: obciGanglionAccelAxisX,
 	OBCIGanglionAccelAxisY: obciGanglionAccelAxisY,
