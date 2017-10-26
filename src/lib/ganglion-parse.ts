@@ -5,7 +5,8 @@ import 'rxjs/add/operator/scan';
 import 'rxjs/add/operator/filter';
 import 'rxjs/add/operator/map';
 
-import { EEGReading, TelemetryData, AccelerometerData, GyroscopeData } from './ganglion-interfaces';
+import { EEGReading, AccelerometerData } from './ganglion-interfaces';
+import { k } from './ganglion-utils';
 
 export function parseControl(controlData: Observable<string>) {
     return controlData
@@ -34,9 +35,31 @@ export function decodeUnsigned12BitData(samples: Uint8Array) {
     return samples12Bit;
 }
 
-export function decodeEEGSamples(samples: Uint8Array) {
-    return decodeUnsigned12BitData(samples)
-        .map(n => 0.48828125 * (n - 0x800));
+export function decodeEEGSamples(data: Uint8Array, decompressedSamples: Array, accelArray: Array) {
+    return _processRouteSampleData(data, decompressedSamples, accelArray);
+    // ATTENTION: FOR LATER WE MUST PARSE RAW DATA BASED ON BYTE ID
+    // let byteId = data[0];
+    // if (byteId <= k.OBCIGanglionByteId19Bit.max) {
+    //     _processRouteSampleData(data);
+    // } else {
+    //     switch (byteId) {
+    //         case k.OBCIGanglionByteIdMultiPacket:
+    //             this._processMultiBytePacket(data);
+    //             break;
+    //         case k.OBCIGanglionByteIdMultiPacketStop:
+    //             this._processMultiBytePacketStop(data);
+    //             break;
+    //         case k.OBCIGanglionByteIdImpedanceChannel1:
+    //         case k.OBCIGanglionByteIdImpedanceChannel2:
+    //         case k.OBCIGanglionByteIdImpedanceChannel3:
+    //         case k.OBCIGanglionByteIdImpedanceChannel4:
+    //         case k.OBCIGanglionByteIdImpedanceChannelReference:
+    //             this._processImpedanceData(data);
+    //             break;
+    //         default:
+    //             this._processOtherData(data);
+    //     }
+    // }
 }
 
 export function parseAccelerometer(data: DataView): AccelerometerData {
@@ -51,6 +74,138 @@ export function parseAccelerometer(data: DataView): AccelerometerData {
         sequenceId: data.getUint16(0),
         samples: [sample(2), sample(8), sample(14)]
     };
+}
+
+// //////// //
+// PRIVATES //
+// //////// //
+/**
+ * Builds a sample object from an array and sample number.
+ * @param decompressedSamples {Array} - An array that of three
+ *  samples to compute and store deltas through each cycle
+ * @return {{sampleNumber: *}}
+ * @private
+ */
+function _buildSampleCompressed (decompressedSamples: Array) {
+    let out = [];
+    for (let i = 0; i < k.OBCINumberOfChannelsGanglion; i++) {
+        out.push({
+            electrode: i,
+            timestamp: Date.now(),
+            samples: [
+                decompressedSamples[1][i]  * k.OBCIGanglionScaleFactorPerCountVolts,
+                decompressedSamples[2][i]  * k.OBCIGanglionScaleFactorPerCountVolts
+            ]
+        })
+    }
+    return out;
+}
+
+/**
+ * Builds a sample object from an array and sample number.
+ * @param decompressedSamples {Array} - An array that of three
+ *  samples to compute and store deltas through each cycle
+ * @return {{sampleNumber: *}}
+ * @private
+ */
+function _buildSampleDecompressed (decompressedSamples: Array) {
+    let out = [];
+    for (let i = 0; i < k.OBCINumberOfChannelsGanglion; i++) {
+        out.push({
+            electrode: i,
+            timestamp: Date.now(),
+            samples: [
+                decompressedSamples[0][i]  * k.OBCIGanglionScaleFactorPerCountVolts
+            ]
+        })
+    }
+    return out;
+}
+
+/**
+ * Utilize `receivedDeltas` to get actual count values.
+ * @param receivedDeltas {Array} - An array of deltas
+ *  of shape 2x4 (2 samples per packet and 4 channels per sample.)
+ * @param decompressedSamples {Array} - An array that of three
+ *  samples to compute and store deltas through each cycle
+ * @private
+ */
+export function _decompressSamples(receivedDeltas: Array, decompressedSamples: Array) {
+    // add the delta to the previous value
+    for (let i = 1; i < 3; i++) {
+        for (let j = 0; j < 4; j++) {
+            decompressedSamples[i][j] = decompressedSamples[i - 1][j] - receivedDeltas[i - 1][j];
+        }
+    }
+}
+
+/**
+ * Process an compressed packet of data.
+ * @param data {Uint8Array}
+ *  Data packet buffer from noble.
+ * @param decompressedSamples {Array} - An array that of three
+ *  samples to compute and store deltas through each cycle
+*  @param accelArray {Array} - An array to hold casual inter packet data
+ * @private
+ */
+export function _processCompressedData(data: Uint8Array, decompressedSamples: Array, accelArray: Array) {
+    // Save the packet counter
+    let packetCounter = data[0];
+    let eegReadings;
+    // Decompress the buffer into array
+    if (packetCounter <= k.OBCIGanglionByteId18Bit.max) {
+        _decompressSamples(decompressDeltas18Bit(data.slice(k.OBCIGanglionPacket18Bit.dataStart, k.OBCIGanglionPacket18Bit.dataStop)), decompressedSamples);
+        eegReadings = _buildSampleCompressed(decompressedSamples);
+
+        switch (packetCounter % 10) {
+            case k.OBCIGanglionAccelAxisX:
+                accelArray[0] = data[k.OBCIGanglionPacket18Bit.auxByte - 1] * k.OBCIGanglionAccelScaleFactor;
+                break;
+            case k.OBCIGanglionAccelAxisY:
+                accelArray[1] = data[k.OBCIGanglionPacket18Bit.auxByte - 1] * k.OBCIGanglionAccelScaleFactor;
+                break;
+            case k.OBCIGanglionAccelAxisZ:
+                accelArray[2] = data[k.OBCIGanglionPacket18Bit.auxByte - 1] * k.OBCIGanglionAccelScaleFactor;
+                break;
+            default:
+                break;
+        }
+    } else {
+        _decompressSamples(decompressDeltas19Bit(data.slice(k.OBCIGanglionPacket19Bit.dataStart, k.OBCIGanglionPacket19Bit.dataStop)), decompressedSamples);
+        eegReadings = _buildSampleCompressed(decompressedSamples);
+    }
+
+    // Rotate the 0 position for next time
+    for (let i = 0; i < k.OBCINumberOfChannelsGanglion; i++) {
+        decompressedSamples[0][i] = decompressedSamples[2][i];
+    }
+
+    return eegReadings;
+}
+
+export function _processRouteSampleData(data: Uint8Array, decompressedSamples: Array, accelArray: Array) {
+    if (data[0] === k.OBCIGanglionByteIdUncompressed) {
+        _processUncompressedData(data, decompressedSamples);
+    } else {
+        _processCompressedData(data, decompressedSamples, accelArray);
+    }
+}
+
+/**
+ * Process an uncompressed packet of data.
+ * @param data {Buffer}
+ *  Data packet buffer from noble.
+ * @private
+ */
+export function _processUncompressedData(data: Uint8Array, decompressedSamples: Array) {
+    let start = 1;
+
+    for (let i = 0; i < 4; i++) {
+        decompressedSamples[0][i] = interpret24bitAsInt32(data, start);  // seed the decompressor
+        start += 3;
+    }
+
+    return _buildSampleDecompressed(decompressedSamples);
 }
 
 /**
@@ -102,13 +257,12 @@ export function convert19bitAsInt32 (threeByteBuffer: Uint8Array) {
  *  and 4 channels per sample.)
  */
 export function decompressDeltas18Bit (buffer: Uint8Array) {
-  const GanglionSamplesPerPacket = 2;
-  let D = new Array(GanglionSamplesPerPacket); // 2 Ganglion Samples Per Packet
+  let D = new Array(k.OBCIGanglionSamplesPerPacket); // 2 Ganglion Samples Per Packet
   D[0] = [0, 0, 0, 0];
   D[1] = [0, 0, 0, 0];
 
   let receivedDeltas = [];
-  for (let i = 0; i < GanglionSamplesPerPacket; i++) {
+  for (let i = 0; i < k.OBCIGanglionSamplesPerPacket; i++) {
     receivedDeltas.push([0, 0, 0, 0]);
   }
 
@@ -193,13 +347,12 @@ export function decompressDeltas18Bit (buffer: Uint8Array) {
  * @private
  */
 export function decompressDeltas19Bit (buffer: Uint8Array) {
-  const GanglionSamplesPerPacket = 2;
-  let D = new Array(GanglionSamplesPerPacket); // 2
+  let D = new Array(k.OBCIGanglionSamplesPerPacket); // 2
   D[0] = [0, 0, 0, 0];
   D[1] = [0, 0, 0, 0];
 
   let receivedDeltas = [];
-  for (let i = 0; i < GanglionSamplesPerPacket; i++) {
+  for (let i = 0; i < k.OBCIGanglionSamplesPerPacket; i++) {
     receivedDeltas.push([0, 0, 0, 0]);
   }
 
@@ -274,4 +427,19 @@ export function decompressDeltas19Bit (buffer: Uint8Array) {
   receivedDeltas[1][3] = convert19bitAsInt32(miniBuf);
 
   return receivedDeltas;
+}
+
+function interpret24bitAsInt32 (byteArray, index) {
+    // little endian
+    let newInt = (
+        ((0xFF & byteArray[index]) << 16) |
+        ((0xFF & byteArray[index + 1]) << 8) |
+        (0xFF & byteArray[index + 2])
+    );
+    if ((newInt & 0x00800000) > 0) {
+        newInt |= 0xFF000000;
+    } else {
+        newInt &= 0x00FFFFFF;
+    }
+    return newInt;
 }

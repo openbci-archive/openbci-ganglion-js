@@ -4,7 +4,7 @@
 
 Ganglion biosensor JavaScript Library (using Web Bluetooth)
 
-This app is 100% based of [muse-js](https://github.com/urish/muse-js) by Uri Shaked. Thanks!
+This app is 100% based of [muse-js](https://github.com/urish/muse-js) by Uri Shaked. This project is not endorsed by Uri in the slightest bit.
 
 ## Running the demo app
 
