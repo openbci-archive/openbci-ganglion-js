@@ -20,6 +20,9 @@ export async function observableCharacteristic(characteristic: BluetoothRemoteGA
 		.map((event: Event) => (event.target as BluetoothRemoteGATTCharacteristic).value as DataView);
 }
 
+/** Random */
+const obciNumChannelsGanglion = 4;
+
 /** Accel packets */
 const obciGanglionAccelAxisX = 1;
 const obciGanglionAccelAxisY = 2;
@@ -70,6 +73,7 @@ const obciGanglionScaleFactorPerCountVolts = obciGanglionMCP3912Vref / (8388607.
 
 
 export const k = {
+	OBCINumberOfChannelsGanglion: obciNumChannelsGanglion,
 	OBCIGanglionAccelScaleFactor: obciGanglionAccelScaleFactor,
 	/** Accel packets */
 	OBCIGanglionAccelAxisX: obciGanglionAccelAxisX,

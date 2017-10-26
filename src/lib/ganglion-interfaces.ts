@@ -1,7 +1,7 @@
 export interface EEGReading {
     electrode: number; // 0 to 3
     timestamp: number;
-    samples: number[]; // 2 samples each time
+    samples: number[]; // 1 to 2 samples each time
 }
 
 export interface XYZ {

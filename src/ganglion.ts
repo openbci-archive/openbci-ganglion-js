@@ -37,7 +37,6 @@ export class GanglionClient {
     public connectionStatus = new BehaviorSubject<boolean>(false);
     public rawControlData: Observable<string>;
     public controlResponses: Observable<GanglionControlResponse>;
-    public accelerometerData: Observable<AccelerometerData>;
     public eegReadings: Observable<EEGReading>;
 
     async connect(gatt?: BluetoothRemoteGATTServer) {
@@ -65,11 +64,17 @@ export class GanglionClient {
         this.controlResponses = parseControl(this.rawControlData);
 
         // EEG
+        const decompressedSamples = new Array(3);
+        for (let i = 0; i < 3; i++) {
+            decompressedSamples[i] = [0, 0, 0, 0];
+        }
+        const accelArray = [0, 0, 0];
         const eegCharacteristic = await service.getCharacteristic(EEG_CHARACTERISTIC);
-        this.eegData = (await observableCharacteristic(eegCharacteristic))
-            .map(decodeEEGSamples);
+        this.eegReadings = (await observableCharacteristic(eegCharacteristic))
+            .map(data => {
+                return decodeEEGSamples(data, decompressedSamples, accelArray);
+            });
 
-        this.eegReadings = Observable.merge(...eegObservables);
         this.connectionStatus.next(true);
     }
 
