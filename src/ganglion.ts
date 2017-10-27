@@ -8,7 +8,7 @@ import 'rxjs/add/operator/take';
 import 'rxjs/add/operator/toPromise';
 
 import { EEGReading, AccelerometerData, GanglionControlResponse, GanglionDeviceInfo } from './lib/ganglion-interfaces';
-import { parseControl, decodeEEGSamples, parseAccelerometer } from './lib/ganglion-parse';
+import { parseControl, decodeEEGSamples } from './lib/ganglion-parse';
 import { encodeCommand, decodeResponse, observableCharacteristic } from './lib/ganglion-utils';
 
 export { zipSamples, EEGSample } from './lib/zip-samples';
@@ -100,7 +100,7 @@ export class GanglionClient {
     async deviceInfo() {
         const resultListener = this.controlResponses.filter(r => !!r.fw).take(1).toPromise();
         await this.sendCommand('v');
-        return resultListener as Promise<MuseDeviceInfo>;
+        return resultListener as Promise<GanglionDeviceInfo>;
     }
 
     disconnect() {

@@ -35,7 +35,7 @@ export function decodeUnsigned12BitData(samples: Uint8Array) {
     return samples12Bit;
 }
 
-export function decodeEEGSamples(data: Uint8Array, decompressedSamples: Array, accelArray: Array) {
+export function decodeEEGSamples(data: Uint8Array, decompressedSamples: Array<Array<number>>, accelArray: Array<number>) {
     return _processRouteSampleData(data, decompressedSamples, accelArray);
     // ATTENTION: FOR LATER WE MUST PARSE RAW DATA BASED ON BYTE ID
     // let byteId = data[0];
@@ -62,20 +62,6 @@ export function decodeEEGSamples(data: Uint8Array, decompressedSamples: Array, a
     // }
 }
 
-export function parseAccelerometer(data: DataView): AccelerometerData {
-    function sample(startIndex: number) {
-        return {
-            x: data.getInt16(startIndex),
-            y: data.getInt16(startIndex + 2),
-            z: data.getInt16(startIndex + 4),
-        };
-    }
-    return {
-        sequenceId: data.getUint16(0),
-        samples: [sample(2), sample(8), sample(14)]
-    };
-}
-
 // //////// //
 // PRIVATES //
 // //////// //
@@ -86,7 +72,7 @@ export function parseAccelerometer(data: DataView): AccelerometerData {
  * @return {{sampleNumber: *}}
  * @private
  */
-function _buildSampleCompressed (decompressedSamples: Array) {
+function _buildSampleCompressed (decompressedSamples: Array<Array<number>>) {
     let out = [];
     for (let i = 0; i < k.OBCINumberOfChannelsGanglion; i++) {
         out.push({
@@ -108,7 +94,7 @@ function _buildSampleCompressed (decompressedSamples: Array) {
  * @return {{sampleNumber: *}}
  * @private
  */
-function _buildSampleDecompressed (decompressedSamples: Array) {
+function _buildSampleDecompressed (decompressedSamples: Array<Array<number>>) {
     let out = [];
     for (let i = 0; i < k.OBCINumberOfChannelsGanglion; i++) {
         out.push({
@@ -130,7 +116,7 @@ function _buildSampleDecompressed (decompressedSamples: Array) {
  *  samples to compute and store deltas through each cycle
  * @private
  */
-export function _decompressSamples(receivedDeltas: Array, decompressedSamples: Array) {
+export function _decompressSamples(receivedDeltas: Array<Array<number>>, decompressedSamples: Array<Array<number>>) {
     // add the delta to the previous value
     for (let i = 1; i < 3; i++) {
         for (let j = 0; j < 4; j++) {
@@ -148,7 +134,7 @@ export function _decompressSamples(receivedDeltas: Array, decompressedSamples: A
 *  @param accelArray {Array} - An array to hold casual inter packet data
  * @private
  */
-export function _processCompressedData(data: Uint8Array, decompressedSamples: Array, accelArray: Array) {
+export function _processCompressedData(data: Uint8Array, decompressedSamples: Array<Array<number>>, accelArray: Array<number>) {
     // Save the packet counter
     let packetCounter = data[0];
     let eegReadings;
@@ -183,7 +169,7 @@ export function _processCompressedData(data: Uint8Array, decompressedSamples: Ar
     return eegReadings;
 }
 
-export function _processRouteSampleData(data: Uint8Array, decompressedSamples: Array, accelArray: Array) {
+export function _processRouteSampleData(data: Uint8Array, decompressedSamples: Array<Array<number>>, accelArray: Array<number>) {
     if (data[0] === k.OBCIGanglionByteIdUncompressed) {
         _processUncompressedData(data, decompressedSamples);
     } else {
@@ -195,9 +181,11 @@ export function _processRouteSampleData(data: Uint8Array, decompressedSamples: A
  * Process an uncompressed packet of data.
  * @param data {Buffer}
  *  Data packet buffer from noble.
+ * @param decompressedSamples {Array} - An array that of three
+ *  samples to compute and store deltas through each cycle
  * @private
  */
-export function _processUncompressedData(data: Uint8Array, decompressedSamples: Array) {
+export function _processUncompressedData(data: Uint8Array, decompressedSamples: Array<Array<number>>) {
     let start = 1;
 
     for (let i = 0; i < 4; i++) {
@@ -221,7 +209,7 @@ export function _processUncompressedData(data: Uint8Array, decompressedSamples: 
 export function convert18bitAsInt32 (threeByteBuffer: Uint8Array) {
   let prefix = 0;
 
-  if (threeByteBuffer[2] & 0x01 > 0) {
+  if ((threeByteBuffer[2] & 0x01) > 0) {
     // console.log('\t\tNegative number')
     prefix = 0b11111111111111;
   }
@@ -242,7 +230,7 @@ export function convert18bitAsInt32 (threeByteBuffer: Uint8Array) {
 export function convert19bitAsInt32 (threeByteBuffer: Uint8Array) {
   let prefix = 0;
 
-  if (threeByteBuffer[2] & 0x01 > 0) {
+  if ((threeByteBuffer[2] & 0x01) > 0) {
     // console.log('\t\tNegative number')
     prefix = 0b1111111111111;
   }
@@ -429,7 +417,7 @@ export function decompressDeltas19Bit (buffer: Uint8Array) {
   return receivedDeltas;
 }
 
-function interpret24bitAsInt32 (byteArray, index) {
+function interpret24bitAsInt32 (byteArray: Uint8Array, index: number) {
     // little endian
     let newInt = (
         ((0xFF & byteArray[index]) << 16) |
