@@ -1,4 +1,4 @@
-import { GanglionClient, EEGReading, channelNames } from './../../src/muse';
+import { GanglionClient, EEGReading, channelNames } from './../../src/ganglion';
 
 (window as any).connect = async () => {
     let graphTitles = Array.from(document.querySelectorAll('.electrode-item h3'));
@@ -36,7 +36,7 @@ import { GanglionClient, EEGReading, channelNames } from './../../src/muse';
     });
 
     try {
-        client.enableAux = true;
+        // client.enableAux = true;
         await client.connect();
         await client.start();
         document.getElementById('headset-name')!.innerText = client.deviceName;
